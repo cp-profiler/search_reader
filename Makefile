@@ -6,7 +6,7 @@ GCC_FLAGS = -W -Wall -c $(DEBUG)
 LFLAGS = -W -Wall $(DEBUG)
 
 search_reader: $(OBJS)
-	$(CC) $(LFLAGS) $(OBJS) -lzmq -lpthread -ldl -L/usr/local/lib -lprotobuf -o search_reader
+	$(CC) $(LFLAGS) $(OBJS) -lnanomsg -lpthread -ldl -L/usr/local/lib -lprotobuf -o search_reader
 search_reader.o: search_reader.cpp
 	$(CC) $(CFLAGS) search_reader.cpp
 message.pb.o: message.pb.cpp

@@ -7,7 +7,12 @@
 
 #include <google/protobuf/io/zero_copy_stream_impl.h>
 #include <google/protobuf/io/coded_stream.h>
-#include "third-party/zmq.hpp"
+// #include "third-party/zmq.hpp"
+
+#include <nanomsg/nn.h>
+#include <nanomsg/pipeline.h>
+#include <nanomsg/tcp.h>
+
 
 #include "message.pb.hh"
 
@@ -41,37 +46,41 @@ bool readDelimitedFrom(
   return true;
 }
 
-void sendOverSocket(zmq::socket_t &socket, const message::Node &msg) {
+void sendOverSocket(int nanosocket, const message::Node &msg) {
   std::string msg_str;
   msg.SerializeToString(&msg_str);
 
-  zmq::message_t request(msg_str.size());
-  memcpy((void*)request.data(), msg_str.c_str(), msg_str.size());
+  void *buf = new char[msg_str.size()];
+  // zmq::message_t request(msg_str.size());
+  memcpy(buf, msg_str.c_str(), msg_str.size());
 
   // Sometimes sending will fail with EINTR.  In this case, we try to
   // send the message again.
   while (true) {
     int failed_attempts = 0;
-    try {
-      bool sentOK = socket.send(request);
-      // If sentOK is false, there was an EAGAIN.  We handle this the
-      // same as EINTR.
-      if (!sentOK) {
-        failed_attempts++;
-        if (failed_attempts > 10) abort();
-        continue;
-      }
-      // Success: stop the loop.
-      break;
-    } catch (zmq::error_t &e) {
-      failed_attempts++;
-      if (failed_attempts > 10) abort();
-      if (e.num() == EINTR) {
-        continue;
-      }
-      // If it was something other than EINTR, rethrow the exception.
-      throw e;
-    }
+    int bytes = nn_send(nanosocket, buf, msg_str.size(), 0);
+        if (bytes > 0)
+            break;
+        std::cerr << "error sending";
+        break;
+    //   // If sentOK is false, there was an EAGAIN.  We handle this the
+    //   // same as EINTR.
+    //   if (!sentOK) {
+    //     failed_attempts++;
+    //     if (failed_attempts > 10) abort();
+    //     continue;
+    //   }
+    //   // Success: stop the loop.
+    //   break;
+    // } catch (zmq::error_t &e) {
+    //   failed_attempts++;
+    //   if (failed_attempts > 10) abort();
+    //   if (e.num() == EINTR) {
+    //     continue;
+    //   }
+    //   // If it was something other than EINTR, rethrow the exception.
+    //   throw e;
+    // }
   }
 }
 
@@ -106,11 +115,16 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  zmq::context_t context(1);
-  zmq::socket_t socket(context, ZMQ_PUSH);
+  // zmq::context_t context(1);
+  // zmq::socket_t socket(context, ZMQ_PUSH);
 
-  std::string address = "tcp://localhost:6565";
-  socket.connect(address.c_str());
+  int nanosocket = nn_socket(AF_SP, NN_PUSH);
+  int linger = -1;
+  nn_setsockopt(nanosocket, NN_SOL_SOCKET, NN_LINGER, &linger, sizeof(linger));
+  int endpoint = nn_connect(nanosocket, "tcp://localhost:6565");
+
+  // std::string address = "tcp://localhost:6565";
+  // socket.connect(address.c_str());
 
   message::Node msg;
 
@@ -137,12 +151,13 @@ int main(int argc, char** argv) {
       }
     }
 
-    sendOverSocket(socket, msg);
+    sendOverSocket(nanosocket, msg);
 
     if (msg.type() == message::Node::DONE)
-      return 0;
-
+        break;
   }
+
+  nn_shutdown(nanosocket, endpoint);
 
   return 0;
 }
