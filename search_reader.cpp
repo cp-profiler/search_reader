@@ -7,14 +7,9 @@
 
 #include <google/protobuf/io/zero_copy_stream_impl.h>
 #include <google/protobuf/io/coded_stream.h>
-// #include "third-party/zmq.hpp"
-
-#include <nanomsg/nn.h>
-#include <nanomsg/pipeline.h>
-#include <nanomsg/tcp.h>
-
 
 #include "message.pb.hh"
+#include "cpp-integration/connector.hh"
 
 using namespace std;
 using google::protobuf::io::IstreamInputStream;
@@ -46,48 +41,9 @@ bool readDelimitedFrom(
   return true;
 }
 
-void sendOverSocket(int nanosocket, const message::Node &msg) {
-  std::string msg_str;
-  msg.SerializeToString(&msg_str);
-
-  void *buf = new char[msg_str.size()];
-  // zmq::message_t request(msg_str.size());
-  memcpy(buf, msg_str.c_str(), msg_str.size());
-
-  // Sometimes sending will fail with EINTR.  In this case, we try to
-  // send the message again.
-  while (true) {
-    int failed_attempts = 0;
-    int bytes = nn_send(nanosocket, buf, msg_str.size(), 0);
-        if (bytes > 0)
-            break;
-        std::cerr << "error sending";
-        break;
-    //   // If sentOK is false, there was an EAGAIN.  We handle this the
-    //   // same as EINTR.
-    //   if (!sentOK) {
-    //     failed_attempts++;
-    //     if (failed_attempts > 10) abort();
-    //     continue;
-    //   }
-    //   // Success: stop the loop.
-    //   break;
-    // } catch (zmq::error_t &e) {
-    //   failed_attempts++;
-    //   if (failed_attempts > 10) abort();
-    //   if (e.num() == EINTR) {
-    //     continue;
-    //   }
-    //   // If it was something other than EINTR, rethrow the exception.
-    //   throw e;
-    // }
-  }
-}
-
-std::string statusToString(message::Node::NodeStatus status) {
+std::string statusToString(message::Node::NodeStatus) {
   return "";
 }
-
 
 int main(int argc, char** argv) {
 
@@ -115,22 +71,15 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  // zmq::context_t context(1);
-  // zmq::socket_t socket(context, ZMQ_PUSH);
-
-  int nanosocket = nn_socket(AF_SP, NN_PUSH);
-  int linger = -1;
-  nn_setsockopt(nanosocket, NN_SOL_SOCKET, NN_LINGER, &linger, sizeof(linger));
-  int endpoint = nn_connect(nanosocket, "tcp://localhost:6565");
-
-  // std::string address = "tcp://localhost:6565";
-  // socket.connect(address.c_str());
+  Profiling::Connector c(6565);
+  c.connect();
 
   message::Node msg;
 
   while (true) {
 
-    readDelimitedFrom(&raw_input, &msg);
+    bool ok = readDelimitedFrom(&raw_input, &msg);
+    if (!ok) break;
 
     if (DEBUG) {
       cout << "Enter to send a node..." << endl;
@@ -151,13 +100,13 @@ int main(int argc, char** argv) {
       }
     }
 
-    sendOverSocket(nanosocket, msg);
+    std::string s;
+    msg.SerializeToString(&s);
+    c.sendRawMsg(s.c_str(), s.size());
 
     if (msg.type() == message::Node::DONE)
         break;
   }
-
-  nn_shutdown(nanosocket, endpoint);
 
   return 0;
 }
