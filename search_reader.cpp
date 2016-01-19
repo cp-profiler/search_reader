@@ -32,7 +32,7 @@ bool readDelimitedFrom(
       input.PushLimit(size);
 
   // Parse the message.
-  if (!message->MergeFromCodedStream(&input)) return false;
+  if (!message->ParseFromCodedStream(&input)) return false;
   if (!input.ConsumedEntireMessage()) return false;
 
   // Release the limit.
@@ -76,6 +76,8 @@ int main(int argc, char** argv) {
 
   message::Node msg;
 
+  int nodes_processed = 0;
+
   while (true) {
 
     bool ok = readDelimitedFrom(&raw_input, &msg);
@@ -103,6 +105,10 @@ int main(int argc, char** argv) {
     std::string s;
     msg.SerializeToString(&s);
     c.sendRawMsg(s.c_str(), s.size());
+
+    nodes_processed++;
+    if (nodes_processed % 10000 == 0)
+        std::cout << "nodes processed: " << nodes_processed << "\n";
 
     if (msg.type() == message::Node::DONE)
         break;

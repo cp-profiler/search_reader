@@ -1,8 +1,8 @@
 OBJS = search_reader.o message.pb.o connector.o
 CC = g++
 DEBUG = -g
-CFLAGS = -std=c++0x -W -Wall -c $(DEBUG)
-GCC_FLAGS = -W -Wall -c $(DEBUG)
+CFLAGS = -std=c++0x -O2 -W -Wall -c $(DEBUG)
+GCC_FLAGS = -O2 -W -Wall -c $(DEBUG)
 LFLAGS = -W -Wall $(DEBUG)
 
 search_reader: $(OBJS)
@@ -12,7 +12,7 @@ search_reader.o: search_reader.cpp
 connector.o : cpp-integration/connector.cpp
 	$(CC) $(CFLAGS) cpp-integration/connector.cpp
 message.pb.o: message.pb.cpp
-	$(CC) -c message.pb.cpp -o message.pb.o
+	$(CC) -O2 -c message.pb.cpp -o message.pb.o
 
 clean:
 	rm *.o search_reader
